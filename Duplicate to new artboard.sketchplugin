@@ -1,0 +1,113 @@
+// move selection to new artboard (cmd shift a)
+
+var HEIGHT = 5000;
+var WIDTH = 5000;
+
+if (selection.count() > 0 && artboardSelectionCount() === 0) {
+    var artboard = createNewArtboardFromSelection();
+    var layers = artboard.layers();
+    var layerTop = layers.firstObject();
+    var layerLeft = layers.firstObject();
+    var layerRight = layers.firstObject();
+    var layerBottom = layers.firstObject();
+
+    for (var i = 0; i < layers.count(); i++) {
+        if (layers.objectAtIndex(i).frame().minY() < layerTop.frame().minY()) {
+            layerTop = layers.objectAtIndex(i);
+        }
+
+        if (layers.objectAtIndex(i).frame().minX() < layerLeft.frame().minX()) {
+            layerLeft = layers.objectAtIndex(i);
+        }
+
+        if (layers.objectAtIndex(i).frame().maxX() > layerRight.frame().maxX()) {
+            layerRight = layers.objectAtIndex(i);
+        }
+
+        if (layers.objectAtIndex(i).frame().maxY() > layerBottom.frame().maxY()) {
+            layerBottom = layers.objectAtIndex(i);
+        }
+    }
+
+    var frame = artboard.frame();
+
+    frame.setWidth(HEIGHT);
+    var left = layerLeft.frame().minX();
+    var right = frame.width() - layerRight.frame().maxX();
+    frame.subtractWidth(left);
+    frame.subtractWidth(right);
+
+    frame.setHeight(HEIGHT);
+    var top = layerTop.frame().minY();
+    var bottom = frame.height() - layerBottom.frame().maxY();
+    frame.subtractHeight(top);
+    frame.subtractHeight(bottom);
+
+    for (var i = 0; i < layers.count(); i++) {
+        layers.objectAtIndex(i).frame().subtractY(top);
+        layers.objectAtIndex(i).frame().subtractX(left);
+    }
+
+    artboard.select_byExpandingSelection(true, false);
+} else {
+    doc.showMessage("Please make right selection with layers. Except artboards.");
+}
+
+function createNewArtboardFromSelection() {
+    var artboard = MSArtboardGroup.new();
+
+    artboard.frame().setWidth(WIDTH);
+    artboard.frame().setHeight(HEIGHT);
+    artboard.frame().setX(doc.currentPage().artboards().count() ? (rightmostArtboardX() + 20) : 0);
+    artboard.frame().setY(doc.currentPage().artboards().count() ? topmostArtboardY() : 0);
+
+    doc.currentPage().addLayers(NSArray.arrayWithObjects(artboard));
+    for(var i = 0; i < selection.count(); i++) {
+        var selectedItemCopy = selection[i].duplicate();
+        artboard.addLayers(NSArray.arrayWithObjects(selectedItemCopy));
+
+        var parentGroup = selection[i].parentGroup();
+        parentGroup.removeLayer(selectedItemCopy);
+    }
+
+    return artboard;
+}
+
+function artboardSelectionCount() {
+    var artboardCount = 0;
+    for (var i = 0; i < selection.count(); i++) {
+        if (selection[i].className() == "MSArtboardGroup") {
+            artboardCount++;
+        }
+    }
+    return artboardCount;
+}
+
+function rightmostArtboardX() {
+    var artboards = doc.currentPage().artboards();
+    var firstArtboard = artboards[0];
+    var maxXPos = firstArtboard.absoluteRect().maxX();
+    var loop = artboards.objectEnumerator();
+    while (artboard = loop.nextObject()) {
+        var artboardMaxX = artboard.absoluteRect().maxX();
+        if (artboardMaxX >= maxXPos) {
+            maxXPos = artboardMaxX;
+        }
+    }
+    return maxXPos;
+}
+
+function topmostArtboardY() {
+    var artboards = doc.currentPage().artboards();
+    var firstArtboard = artboards[0];
+    var minYPos = firstArtboard.absoluteRect().minY();
+    var loop = artboards.objectEnumerator();
+    while (artboard = loop.nextObject()) {
+        var artboardMinY = artboard.absoluteRect().minY();
+        if (artboardMinY <= minYPos) {
+            minYPos = artboardMinY;
+        }
+    }
+    return minYPos;
+}
+
