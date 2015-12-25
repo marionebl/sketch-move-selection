@@ -6,46 +6,60 @@ var WIDTH = 5000;
 if (selection.count() > 0 && artboardSelectionCount() === 0) {
     var artboard = createNewArtboardFromSelection();
     var layers = artboard.layers();
-    var layerTop = layers.firstObject();
-    var layerLeft = layers.firstObject();
-    var layerRight = layers.firstObject();
-    var layerBottom = layers.firstObject();
+    var firstLayer = layers.firstObject();
+    var cropLayer = {
+        top: firstLayer,
+        left: firstLayer,
+        right: firstLayer,
+        bottom: firstLayer
+    };
 
-    for (var i = 0; i < layers.count(); i++) {
-        if (layers.objectAtIndex(i).frame().minY() < layerTop.frame().minY()) {
-            layerTop = layers.objectAtIndex(i);
+    for (var i = layers.count(); i--;) {
+        var currentLayer = layers.objectAtIndex(i);
+        var currentLayerFrame = currentLayer.frame();
+        var cropLayerFrame = {
+            top: cropLayer.top.frame(),
+            left: cropLayer.left.frame(),
+            right: cropLayer.right.frame(),
+            bottom: cropLayer.bottom.frame()
+        };
+
+        if (currentLayerFrame.minY() < cropLayerFrame.top.minY()) {
+            cropLayer.top = currentLayer;
         }
 
-        if (layers.objectAtIndex(i).frame().minX() < layerLeft.frame().minX()) {
-            layerLeft = layers.objectAtIndex(i);
+        if (currentLayerFrame.minX() < cropLayerFrame.left.minX()) {
+            cropLayer.left = currentLayer;
         }
 
-        if (layers.objectAtIndex(i).frame().maxX() > layerRight.frame().maxX()) {
-            layerRight = layers.objectAtIndex(i);
+        if (currentLayerFrame.maxX() > cropLayerFrame.right.maxX()) {
+            cropLayer.right = currentLayer;
         }
 
-        if (layers.objectAtIndex(i).frame().maxY() > layerBottom.frame().maxY()) {
-            layerBottom = layers.objectAtIndex(i);
+        if (currentLayerFrame.maxY() > cropLayerFrame.bottom.maxY()) {
+            cropLayer.bottom = currentLayer;
         }
     }
 
     var frame = artboard.frame();
 
-    frame.setWidth(HEIGHT);
-    var left = layerLeft.frame().minX();
-    var right = frame.width() - layerRight.frame().maxX();
+    frame.setWidth(WIDTH);
+    var left = cropLayerFrame.left.minX();
+    var right = frame.width() - cropLayerFrame.right.maxX();
     frame.subtractWidth(left);
     frame.subtractWidth(right);
 
     frame.setHeight(HEIGHT);
-    var top = layerTop.frame().minY();
-    var bottom = frame.height() - layerBottom.frame().maxY();
+    var top = cropLayer.top.frame().minY();
+    var bottom = frame.height() - cropLayer.bottom.frame().maxY();
     frame.subtractHeight(top);
     frame.subtractHeight(bottom);
 
-    for (var i = 0; i < layers.count(); i++) {
-        layers.objectAtIndex(i).frame().subtractY(top);
-        layers.objectAtIndex(i).frame().subtractX(left);
+    for (var i = layers.count(); i--;) {
+        var currentLayerFrame = layers.objectAtIndex(i).frame();
+
+        currentLayerFrame.subtractY(top);
+        currentLayerFrame.subtractX(left);
     }
 
     artboard.select_byExpandingSelection(true, false);
@@ -55,14 +69,17 @@ if (selection.count() > 0 && artboardSelectionCount() === 0) {
 
 function createNewArtboardFromSelection() {
     var artboard = MSArtboardGroup.new();
+    var artboardFrame = artboard.frame();
+    var currentPage = doc.currentPage();
+    var artboardCount = currentPage.artboards().count();
 
-    artboard.frame().setWidth(WIDTH);
-    artboard.frame().setHeight(HEIGHT);
-    artboard.frame().setX(doc.currentPage().artboards().count() ? (rightmostArtboardX() + 20) : 0);
-    artboard.frame().setY(doc.currentPage().artboards().count() ? topmostArtboardY() : 0);
+    artboardFrame.setWidth(WIDTH);
+    artboardFrame.setHeight(HEIGHT);
+    artboardFrame.setX(artboardCount ? getMaxArtboardDimension('right') + 20 : 0);
+    artboardFrame.setY(artboardCount ? getMaxArtboardDimension('top') : 0);
 
-    doc.currentPage().addLayers(NSArray.arrayWithObjects(artboard));
-    for(var i = 0; i < selection.count(); i++) {
+    currentPage.addLayers(NSArray.arrayWithObjects(artboard));
+    for (var i = selection.count(); i--;) {
         var selectedItemCopy = selection[i].duplicate();
         artboard.addLayers(NSArray.arrayWithObjects(selectedItemCopy));
 
@@ -75,7 +92,7 @@ function createNewArtboardFromSelection() {
 
 function artboardSelectionCount() {
     var artboardCount = 0;
-    for (var i = 0; i < selection.count(); i++) {
+    for (var i = selection.count(); i--;) {
         if (selection[i].className() == "MSArtboardGroup") {
             artboardCount++;
         }
@@ -83,31 +100,28 @@ function artboardSelectionCount() {
     return artboardCount;
 }
 
-function rightmostArtboardX() {
+function getMaxArtboardDimension(type) {
+    type = type || "top";
+
     var artboards = doc.currentPage().artboards();
     var firstArtboard = artboards[0];
-    var maxXPos = firstArtboard.absoluteRect().maxX();
     var loop = artboards.objectEnumerator();
+
+    var dimension = getDimension(firstArtboard, type);
+
     while (artboard = loop.nextObject()) {
-        var artboardMaxX = artboard.absoluteRect().maxX();
-        if (artboardMaxX >= maxXPos) {
-            maxXPos = artboardMaxX;
+        var currentDimension = getDimension(artboard, type);
+
+        if ((type === "top" && currentDimension <= dimension) ||
+            (type !== "top" && currentDimension >= dimension)) {
+            dimension = currentDimension;
         }
     }
-    return maxXPos;
+    return dimension;
 }
 
-function topmostArtboardY() {
-    var artboards = doc.currentPage().artboards();
-    var firstArtboard = artboards[0];
-    var minYPos = firstArtboard.absoluteRect().minY();
-    var loop = artboards.objectEnumerator();
-    while (artboard = loop.nextObject()) {
-        var artboardMinY = artboard.absoluteRect().minY();
-        if (artboardMinY <= minYPos) {
-            minYPos = artboardMinY;
-        }
-    }
-    return minYPos;
+function getDimension(artboard, type) {
+    return type === "top" ?
+        artboard.absoluteRect().minY() :
+        artboard.absoluteRect().maxX();
 }
-
